@@ -1,91 +1,29 @@
-const { default: makeWASocket, BufferJSON, WA_DEFAULT_EPHEMERAL, generateWAMessageFromContent, downloadContentFromMessage, downloadHistory, proto, getMessage, generateWAMessageContent, prepareWAMessageMedia } = require('@adiwajshing/baileys')
-const { servers, yta, ytv } = require('../lib/y2mate')
-let fs = require('fs')
-let yts = require('yt-search')
-let fetch = require('node-fetch')
-let handler = async (m, { conn, command, text, usedPrefix }) => {
-  if (!text) throw `uhm.. cari apa?\n\ncontoh:\n${usedPrefix + command} california`
-  let chat = global.db.data.chats[m.chat]
-  let results = await yts(text)
-  let vid = results.all.find(video => video.seconds < 3600)
-  if (!vid) throw 'Konten Tidak ditemukan'
-  let isVideo = /2$/.test(command)
-  let yt = false
-  let yt2 = false
-  let usedServer = servers[0]
-  for (let i in servers) {
-    let server = servers[i]
-    try {
-      yt = await yta(vid.url, server)
-      yt2 = await ytv(vid.url, server)
-      usedServer = server
-      break
-    } catch (e) {
-      m.reply(`Server ${server} error!${servers.length >= i + 1 ? '' : '\nmencoba server lain...'}`)
-    }
-  }
-  if (yt === false) throw 'semua server gagal'
-  if (yt2 === false) throw 'semua server gagal'
-  let { dl_link, thumb, title, filesize, filesizeF } = yt
-let anu =  `
-*Judul:* ${title}
-*Ukuran File Audio:* ${filesizeF}
-*Ukuran File Video:* ${yt2.filesizeF}
-*Server y2mate:* ${usedServer}
-*Link Sumber:* 
-${vid.url}
+import fetch from 'node-fetch'
+import { youtubeSearch } from '@bochilteam/scraper'
 
-`
-     let message = await prepareWAMessageMedia({ image: await (await require('node-fetch')(thumb)).buffer()}, { upload: conn.waUploadToServer }) 
-      const template = generateWAMessageFromContent(m.chat, proto.Message.fromObject({
-      templateMessage: {
-          hydratedTemplate: {
-            imageMessage: message.imageMessage, 
-            hydratedContentText: anu,
-            hydratedFooterText: wm, 
-            hydratedButtons: [{
-             urlButton: {
-               displayText: 'Join Here',
-               url: gc
-             }
-
-           },
-               {
-             quickReplyButton: {
-               displayText: 'Video 360p',
-               id: `.ytmp4 ${vid.url}`,
-             }
-
-            },
-               {
-             quickReplyButton: {
-               displayText: 'Video 720p',
-               id: `.ytv720 ${vid.url}`,
-             }
-
-            },
-               {
-             quickReplyButton: {
-               displayText: 'Audio',
-               id: `.ytmp3 ${vid.url}`,
-             }
-
-           }]
-         }
-       }
-     }), { userJid: m.sender, quoted: m });
-    //conn.reply(m.chat, text.trim(), m)
-    return await conn.relayMessage(
-         m.chat,
-         template.message,
-         { messageId: template.key.id }
-     )
+let handler = async (m, { conn, text, usedPrefix }) => {
+  if (!text) throw 'Input Query'
+  let vid = (await youtubeSearch(text)).video[0]
+  if (!vid) throw 'Video/Audio Tidak Ditemukan'
+  let { title, description, thumbnail, videoId, durationH, durationS, viewH, publishedTime } = vid
+  let url = 'https://www.youtube.com/watch?v=' + videoId
+  let ytLink = `https://yt-downloader.akkun3704.repl.co/?url=${url}&filter=audioonly&quality=highestaudio&contenttype=audio/mpeg`
+  let capt = `*Title:* ${title}\n*Published:* ${publishedTime}\n*Duration:* ${durationH}\n*Views:* ${viewH}\n*Url:* ${url}`
+  let buttons = [{ buttonText: { displayText: 'Video' }, buttonId: `${usedPrefix}ytv ${url}` }]
+  let msg = await conn.sendMessage(m.chat, { image: { url: thumbnail }, caption: capt, footer: '_Audio on progress..._', buttons }, { quoted: m })
+  // if (durationS > 4000) return conn.sendMessage(m.chat, { text: `*Download:* ${await shortUrl(ytLink)}\n\n_Duration too long..._` }, { quoted: msg })
+  conn.sendMessage(m.chat, { audio: { url: ytLink }, mimetype: 'audio/mpeg' }, { quoted: msg })
 }
-handler.help = ['play'].map(v => v + ' <pencarian>')
+handler.help = handler.alias = ['play']
 handler.tags = ['downloader']
-handler.command = /^(p|play)$/i
-
+handler.command = /^(play)$/i
 handler.exp = 0
 
-module.exports = handler
+export default handler
 
+async function shortUrl(url) {
+  url = encodeURIComponent(url)
+  let res = await fetch(`https://is.gd/create.php?format=simple&url=${url}`)
+  if (!res.ok) throw false
+  return await res.text()
+}
